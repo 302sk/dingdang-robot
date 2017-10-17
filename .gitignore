@@ -82,5 +82,9 @@ userInfo
 # wget log
 wget-log*
 
+# some thirdparty libs
+client/mic_array
+login/wxqr.png
+
 # pycharm project folder
 .idea

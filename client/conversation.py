@@ -13,7 +13,7 @@ class Conversation(object):
         self.mic = mic
         self.profile = profile
         self.brain = Brain(mic, profile)
-        self.notifier = Notifier(profile)
+        self.notifier = Notifier(profile, self.brain)
         self.wxbot = None
 
     def is_proper_time(self):
@@ -55,23 +55,29 @@ class Conversation(object):
                                       str(notif))
                     self.mic.say(str(notif))
 
-            self._logger.debug("Started listening for keyword '%s'",
-                               self.persona)
-            threshold, transcribed = self.mic.passiveListen(self.persona)
-            self._logger.debug("Stopped listening for keyword '%s'",
-                               self.persona)
-
-            if not transcribed or not threshold:
-                self._logger.info("Nothing has been said or transcribed.")
+            if self.mic.stop_passive:
                 continue
-            self._logger.info("Keyword '%s' has been said!", self.persona)
+
+            if not self.mic.skip_passive:
+                self._logger.debug("Started listening for keyword '%s'",
+                                   self.persona)
+                threshold, transcribed = self.mic.passiveListen(self.persona)
+                self._logger.debug("Stopped listening for keyword '%s'",
+                                   self.persona)
+
+                if not transcribed or not threshold:
+                    self._logger.info("Nothing has been said or transcribed.")
+                    continue
+                self._logger.info("Keyword '%s' has been said!", self.persona)
+            else:
+                if not self.mic.chatting_mode:
+                    self.mic.skip_passive = False
 
             self._logger.debug("Started to listen actively with threshold: %r",
                                threshold)
             input = self.mic.activeListenToAllOptions(threshold)
             self._logger.debug("Stopped to listen actively with threshold: %r",
                                threshold)
-
             if input:
                 self.brain.query(input, self.wxbot)
             else:

@@ -1,9 +1,13 @@
 # -*- coding: utf-8-*-
 import imaplib
 import email
+import time
+import datetime
+import logging
 from dateutil import parser
 
 WORDS = ["EMAIL", "INBOX"]
+SLUG = "email"
 
 
 # 字符编码转换方法
@@ -38,6 +42,14 @@ def getSender(msg):
     return sender
 
 
+def isSelfEmail(msg, profile):
+    """ Whether the email is sent by the user """
+    fromstr = msg["From"]
+    addr = (fromstr[fromstr.find('<')+1:fromstr.find('>')]).strip('\"')
+    address = profile[SLUG]['address'].strip()
+    return addr == address
+
+
 def getSubject(msg, profile):
     """
         Returns the title of an email
@@ -55,17 +67,36 @@ def getSubject(msg, profile):
         return ''
     if 'read_email_title' in profile:
         to_read = profile['read_email_title']
-    if '[echo]' in sub:
+    if '[echo]' in sub or '[control]' in sub:
         return sub
     if to_read:
         return '邮件标题为 %s' % sub
     return ''
 
 
+def isNewEmail(msg):
+    """ Wether an email is a new email """
+    date = msg['Date']
+    dtext = date.split(',')[1].split('+')[0].strip()
+    dtime = time.strptime(dtext, '%d %b %Y %H:%M:%S')
+    current = time.localtime()
+    dt = datetime.datetime(*dtime[:6])
+    cr = datetime.datetime(*current[:6])
+    return (cr - dt).days == 0
+
+
 def isEchoEmail(msg, profile):
     """ Whether an email is an Echo email"""
     subject = getSubject(msg, profile)
     if '[echo]' in subject:
+        return True
+    return False
+
+
+def isControlEmail(msg, profile):
+    """ Whether an email is a control email"""
+    subject = getSubject(msg, profile)
+    if '[control]' in subject and isSelfEmail(msg, profile):
         return True
     return False
 
@@ -104,15 +135,19 @@ def fetchUnreadEmails(profile, since=None, markRead=False, limit=None):
         Returns:
         A list of unread email objects.
     """
-
-    conn = imaplib.IMAP4(profile['email']['imap_server'],
-                         profile['email']['imap_port'])
+    logger = logging.getLogger(__name__)
+    conn = imaplib.IMAP4(profile[SLUG]['imap_server'],
+                         profile[SLUG]['imap_port'])
     conn.debug = 0
-    conn.login(profile['email']['address'], profile['email']['password'])
-    conn.select(readonly=(not markRead))
 
     msgs = []
-    (retcode, messages) = conn.search(None, '(UNSEEN)')
+    try:
+        conn.login(profile[SLUG]['address'], profile[SLUG]['password'])
+        conn.select(readonly=(not markRead))
+        (retcode, messages) = conn.search(None, '(UNSEEN)')
+    except Exception:
+        logger.warning("抱歉，您的邮箱账户验证失败了，请检查下配置")
+        return None
 
     if retcode == 'OK' and messages != ['']:
         numUnread = len(messages[0].split(' '))
@@ -122,6 +157,8 @@ def fetchUnreadEmails(profile, since=None, markRead=False, limit=None):
         for num in messages[0].split(' '):
             # parse email RFC822 format
             ret, data = conn.fetch(num, '(RFC822)')
+            if data is None:
+                continue
             msg = email.message_from_string(data[0][1])
 
             if not since or getDate(msg) > since:
@@ -129,6 +166,7 @@ def fetchUnreadEmails(profile, since=None, markRead=False, limit=None):
 
             if isEchoEmail(msg, profile):
                 conn.store(num, '+FLAGS', '\Seen')
+
     conn.close()
     conn.logout()
 
@@ -148,19 +186,19 @@ def handle(text, mic, profile, wxbot=None):
                    address)
         wxBot -- wechat robot
     """
-    try:
-        msgs = fetchUnreadEmails(profile, limit=5)
+    msgs = fetchUnreadEmails(profile, limit=5)
 
-        if isinstance(msgs, int):
-            response = "您有 %d 封未读邮件" % msgs
-            mic.say(response)
-            return
-
-        senders = [getSender(e) for e in msgs]
-    except imaplib.IMAP4.error:
+    if msgs is None:
         mic.say(
             u"抱歉，您的邮箱账户验证失败了")
         return
+
+    if isinstance(msgs, int):
+        response = "您有 %d 封未读邮件" % msgs
+        mic.say(response)
+        return
+
+    senders = [getSender(e) for e in msgs]
 
     if not senders:
         mic.say(u"您没有未读邮件，真棒！")
