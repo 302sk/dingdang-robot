@@ -150,6 +150,7 @@ class Mic:
                 pass
 
         # start passively listening for disturbance above threshold
+        cutoff_index = 0
         for i in range(0, RATE / CHUNK * LISTEN_TIME):
 
             try:
@@ -158,6 +159,7 @@ class Mic:
                 score = self.getScore(data)
 
                 if score > THRESHOLD:
+                    cutoff_index = i
                     didDetect = True
                     break
             except Exception, e:
@@ -176,7 +178,7 @@ class Mic:
             return (None, None)
 
         # cutoff any recording before this disturbance was detected
-        frames = frames[-20:]
+        frames = frames[cutoff_index:]
 
         # otherwise, let's keep recording for few seconds and save the file
         DELAY_MULTIPLIER = 1
