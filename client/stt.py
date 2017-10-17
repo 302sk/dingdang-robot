@@ -13,6 +13,12 @@ import yaml
 import dingdangpath
 import diagnose
 import vocabcompiler
+from sys import platform
+#import snowboydetect according to current platform
+if platform == 'darwin':
+    from snowboy_mac import snowboydetect
+else:
+    from snowboy import snowboydetect
 from uuid import getnode as get_mac
 import hashlib
 import datetime
@@ -532,10 +538,19 @@ class SnowboySTT(AbstractSTTEngine):
         self.sensitivity = sensitivity
         self.hotword = hotword
         self.model = model
-        self.resource_file = os.path.join(dingdangpath.LIB_PATH,
+        if platform == 'darwin':
+            self.resource_file = os.path.join(dingdangpath.LIB_PATH,
+                                          'snowboy_mac/common.res')
+        else:
+            self.resource_file = os.path.join(dingdangpath.LIB_PATH,
                                           'snowboy/common.res')
+
         try:
-            from snowboy import snowboydetect
+            if platform == 'darwin':
+                from snowboy import snowboydetect
+            else:
+                from snowboy_mac import snowboydetect
+
         except Exception, e:
             self._logger.critical(e)
             if 'libf77blas.so' in e.message:
@@ -576,7 +591,7 @@ class SnowboySTT(AbstractSTTEngine):
         return config
 
     def transcribe(self, fp):
-        fp.seek(44)
+        fp.seek(44)  # skip 44 bytes wav file's header
         data = fp.read()
         ans = self.detector.RunDetection(data)
         if ans > 0:

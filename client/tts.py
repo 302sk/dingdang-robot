@@ -58,7 +58,10 @@ class AbstractTTSEngine(object):
     @classmethod
     @abstractmethod
     def is_available(cls):
-        return diagnose.check_executable('aplay')
+        if sys.platform == 'darwin':
+            return diagnose.check_executable('afplay')
+        else:
+            return diagnose.check_executable('aplay')
 
     def __init__(self, **kwargs):
         self._logger = logging.getLogger(__name__)
@@ -68,7 +71,10 @@ class AbstractTTSEngine(object):
         pass
 
     def play(self, filename):
-        cmd = ['aplay', str(filename)]
+        if sys.platform == 'darwin':
+            cmd = ['afplay', str(filename)]
+        else:
+            cmd = ['aplay', str(filename)]
         self._logger.debug('Executing %s', ' '.join([pipes.quote(arg)
                                                      for arg in cmd]))
         with tempfile.TemporaryFile() as f:
@@ -89,15 +95,34 @@ class AbstractMp3TTSEngine(AbstractTTSEngine):
                 diagnose.check_python_import('mad'))
 
     def play_mp3(self, filename, remove=False):
-        cmd = ['play', str(filename)]
-        self._logger.debug('Executing %s', ' '.join([pipes.quote(arg)
-                                                     for arg in cmd]))
-        with tempfile.TemporaryFile() as f:
-            subprocess.call(cmd, stdout=f, stderr=f)
-            f.seek(0)
-            output = f.read()
-            if output:
-                self._logger.debug("Output was: '%s'", output)
+#<<<<<<< HEAD
+#        cmd = ['play', str(filename)]
+#        self._logger.debug('Executing %s', ' '.join([pipes.quote(arg)
+#                                                     for arg in cmd]))
+#        with tempfile.TemporaryFile() as f:
+#            subprocess.call(cmd, stdout=f, stderr=f)
+#            f.seek(0)
+#            output = f.read()
+#            if output:
+#                self._logger.debug("Output was: '%s'", output)
+#=======
+        if sys.platform == 'darwin':
+            cmd = ['afplay', filename]
+            subprocess.call(cmd)
+            return
+        mf = mad.MadFile(filename)
+        with tempfile.NamedTemporaryFile(suffix='.wav') as f:
+            wav = wave.open(f, mode='wb')
+            wav.setframerate(mf.samplerate())
+            wav.setnchannels(1 if mf.mode() == mad.MODE_SINGLE_CHANNEL else 2)
+            # 4L is the sample width of 32 bit audio
+            wav.setsampwidth(4L)
+            frame = mf.read()
+            while frame is not None:
+                wav.writeframes(frame)
+                frame = mf.read()
+            wav.close()
+            self.play(f.name)
 
 
 class SimpleMp3Player(AbstractMp3TTSEngine):
@@ -340,7 +365,10 @@ class MacOSXTTS(AbstractTTSEngine):
                 self._logger.debug("Output was: '%s'", output)
 
     def play(self, filename):
-        cmd = ['aplay', str(filename)]
+        if sys.platform == 'darwin':
+            cmd = ['afplay', str(filename)]
+        else:
+            cmd = ['aplay', str(filename)]
         self._logger.debug('Executing %s', ' '.join([pipes.quote(arg)
                                                      for arg in cmd]))
         with tempfile.TemporaryFile() as f:
