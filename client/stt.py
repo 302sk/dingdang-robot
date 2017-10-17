@@ -547,9 +547,9 @@ class SnowboySTT(AbstractSTTEngine):
 
         try:
             if platform == 'darwin':
-                from snowboy import snowboydetect
-            else:
                 from snowboy_mac import snowboydetect
+            else:
+                from snowboy import snowboydetect
 
         except Exception, e:
             self._logger.critical(e)
